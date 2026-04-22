@@ -2,27 +2,28 @@ require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./src/app');
-const connectDB = require('./src/config/db');
 const gameHandler = require('./src/sockets/gameHandler');
 
 const PORT = process.env.PORT || 5000;
 
-// ✅ Connect to MongoDB
-connectDB();
+// ❌ REMOVE MongoDB if not using
+// const connectDB = require('./src/config/db');
+// connectDB();
 
 // ✅ Create server
 const server = http.createServer(app);
 
-// ✅ Socket.IO setup (FIXED)
+// ✅ Socket.IO setup (Render-safe)
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || '*', // 🔥 important
+    origin: process.env.CLIENT_URL || '*',
     methods: ['GET', 'POST'],
     credentials: true
-  }
+  },
+  allowEIO3: true
 });
 
-// ✅ Socket connection
+// ✅ Attach socket handler
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -33,7 +34,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// ✅ Health check route (REQUIRED for Render debugging)
+// ✅ Health route (Render wake-up)
 app.get('/', (req, res) => {
   res.send('Backend running 🚀');
 });
