@@ -6,10 +6,6 @@ const gameHandler = require('./src/sockets/gameHandler');
 
 const PORT = process.env.PORT || 5000;
 
-// ❌ REMOVE MongoDB if not using
-// const connectDB = require('./src/config/db');
-// connectDB();
-
 // ✅ Create server
 const server = http.createServer(app);
 
@@ -20,7 +16,7 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
     credentials: true
   },
-  allowEIO3: true
+  transports: ['polling', 'websocket'] // 🔥 important
 });
 
 // ✅ Attach socket handler
@@ -34,7 +30,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// ✅ Health route (Render wake-up)
+// ✅ Health route
 app.get('/', (req, res) => {
   res.send('Backend running 🚀');
 });
