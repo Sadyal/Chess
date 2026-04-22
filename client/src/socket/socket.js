@@ -2,17 +2,20 @@ import { io } from 'socket.io-client';
 
 // ✅ Correct backend URL handling
 const URL = import.meta.env.PROD
-  ? import.meta.env.VITE_BACKEND_URL   // 🔥 must match Vercel env
+  ? import.meta.env.VITE_BACKEND_URL
   : 'http://localhost:5000';
 
-// ❗ Optional safety check (helps debugging)
+// ❗ Safety check
 if (!URL) {
   throw new Error("Backend URL is not defined. Check VITE_BACKEND_URL");
 }
 
-// ✅ Create socket connection
+// ✅ FINAL PRODUCTION SOCKET
 export const socket = io(URL, {
-  transports: ['websocket'],   // 🔥 important for Render
+  transports: ['polling', 'websocket'], // 🔥 FIX (polling FIRST)
   withCredentials: true,
   autoConnect: true,
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
 });
