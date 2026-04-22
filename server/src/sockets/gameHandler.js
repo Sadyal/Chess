@@ -1,41 +1,41 @@
 const gameService = require('../services/gameService');
-const Game = require('../models/Game'); // Mongoose model for later DB integration
 
 module.exports = (io, socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
-  // When a player joins a room
-  socket.on('joinRoom', async ({ roomId, playerName }) => {
-    const gameData = gameService.getOrCreateGame(roomId);
-    const players = gameData.players;
-
-    let color = null;
-
-    // Support reconnects and React StrictMode double-mounts
-    if (players.white?.name === playerName) {
-      color = 'white';
-      players.white.id = socket.id;
-    } else if (players.black?.name === playerName) {
-      color = 'black';
-      players.black.id = socket.id;
-    } else if (!players.white) {
-      color = 'white';
-      players.white = { name: playerName, id: socket.id };
-    } else if (!players.black) {
-      color = 'black';
-      players.black = { name: playerName, id: socket.id };
-    } else {
-      socket.emit('error', { message: 'Room is full' });
+  // JOIN ROOM
+  socket.on('joinRoom', ({ roomId, playerName }) => {
+    if (!roomId) {
+      socket.emit('error', { message: 'Room ID required' });
       return;
     }
 
-    // Join socket to room
-    socket.join(roomId);
-    
-    // Attach room and color info to the socket
-    socket.data = { roomId, playerName, color };
+    const gameData = gameService.getOrCreateGame(roomId);
+    const players = gameData.players;
 
-    // Let the player know they joined
+    let color = 'spectator';
+
+    // ✅ STRICT SLOT ASSIGNMENT (NO NAME DEPENDENCY)
+    if (!players.white) {
+      players.white = { id: socket.id, name: playerName || 'Player 1' };
+      color = 'white';
+    } else if (!players.black) {
+      players.black = { id: socket.id, name: playerName || 'Player 2' };
+      color = 'black';
+    } else {
+      color = 'spectator';
+    }
+
+    // Join room
+    socket.join(roomId);
+
+    // Save socket metadata
+    socket.data = { roomId, color };
+
+    console.log(`JOIN → Room: ${roomId}`);
+    console.log("PLAYERS:", players);
+
+    // Send initial state
     socket.emit('joined', {
       roomId,
       color,
@@ -43,24 +43,34 @@ module.exports = (io, socket) => {
       turn: gameData.chess.turn() === 'w' ? 'white' : 'black'
     });
 
-    // Notify others in room
+    // Notify others
     socket.to(roomId).emit('playerJoined', {
       playerName,
       color
     });
 
-    // Check if both players are present
+    // Start game if ready
     if (players.white && players.black) {
-      io.to(roomId).emit('gameStart', { message: 'Game started!' });
+      io.to(roomId).emit('gameStart', {
+        message: 'Game started!',
+        players
+      });
     }
   });
 
-  // When a player makes a move
+  // MAKE MOVE
   socket.on('makeMove', ({ roomId, move }) => {
+    const gameData = gameService.getOrCreateGame(roomId);
+
+    // ❗ Prevent spectators from moving
+    if (socket.data?.color === 'spectator') {
+      socket.emit('error', { message: 'Spectators cannot move' });
+      return;
+    }
+
     const result = gameService.validateAndMakeMove(roomId, move);
-    
+
     if (result.success) {
-      // Broadcast the valid move and new FEN to everyone in the room
       io.to(roomId).emit('gameUpdate', {
         fen: result.fen,
         turn: result.turn,
@@ -68,22 +78,32 @@ module.exports = (io, socket) => {
         isCheckmate: result.isCheckmate,
         isDraw: result.isDraw
       });
-
-      if (result.isGameOver) {
-        // You could save the game to MongoDB here
-      }
     } else {
       socket.emit('error', { message: result.error });
     }
   });
 
-  // Disconnect handler
+  // DISCONNECT (CRITICAL FIX)
   socket.on('disconnect', () => {
     console.log(`Socket disconnected: ${socket.id}`);
-    if (socket.data && socket.data.roomId) {
-      // Notify opponent
-      io.to(socket.data.roomId).emit('opponentDisconnected');
-      // Could also clean up gameService if room is empty
+
+    const { roomId, color } = socket.data || {};
+    if (!roomId) return;
+
+    const gameData = gameService.getOrCreateGame(roomId);
+    const players = gameData.players;
+
+    // ✅ FREE SLOT WHEN PLAYER LEAVES
+    if (color === 'white' && players.white?.id === socket.id) {
+      players.white = null;
     }
+
+    if (color === 'black' && players.black?.id === socket.id) {
+      players.black = null;
+    }
+
+    console.log("AFTER DISCONNECT:", players);
+
+    socket.to(roomId).emit('opponentDisconnected');
   });
 };
