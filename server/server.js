@@ -12,11 +12,14 @@ const server = http.createServer(app);
 // ✅ Socket.IO setup (Render-safe)
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || '*',
+    origin: [
+      "https://chess-black-seven.vercel.app",   // ✅ production domain
+      "https://chess-dzj8l96rp-nikhil-sadyals-projects.vercel.app" // ✅ preview
+    ],
     methods: ['GET', 'POST'],
     credentials: true
   },
-  transports: ['polling', 'websocket'] // 🔥 important
+  transports: ['polling', 'websocket']
 });
 
 // ✅ Attach socket handler
